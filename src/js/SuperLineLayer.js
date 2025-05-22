@@ -9,6 +9,7 @@ export default class SuperLineLayer {
   positionTextureSize = Math.ceil(Math.sqrt(this.maxVertexCount));
   positionArray = new Float32Array(this.maxVertexCount * 2);
   vertexCount = 0;
+  linePixelLength = 50;
 
   onAdd(map, gl) {
     this.map = map;
@@ -52,10 +53,9 @@ export default class SuperLineLayer {
     // gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 
     const zoom = this.map.getZoom();
-    const worldSize = 512 * Math.pow(2, zoom); // 地图总大小（以像素计）
+    const worldSize = 512 * Math.pow(2, zoom);
     const mercatorUnitsPerPixel = 1 / worldSize
-    const pixelLength = 10; // 假设要绘制一个宽度为4像素的线
-    const lineWidthInMercatorUnits = pixelLength * mercatorUnitsPerPixel;
+    const lineWidthInMercatorUnits = this.linePixelLength * mercatorUnitsPerPixel;
 
     gl.useProgram(this.lineShader)
     gl.uniformMatrix4fv(gl.getUniformLocation(this.lineShader, "uMatrix"), false, matrix)

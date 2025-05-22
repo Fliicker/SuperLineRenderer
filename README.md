@@ -1,4 +1,4 @@
-# SuperPointRenderer
+# superLineRenderer
 
 A WebGL demo rendering line symbol by GPU computation.
 
