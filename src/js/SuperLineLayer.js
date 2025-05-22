@@ -1,23 +1,29 @@
 import mapboxgl from "mapbox-gl";
 import { mat4 } from "gl-matrix";
+import axios from "axios";
 
 export default class SuperLineLayer {
   id = "highlight";
   type = "custom";
-  maxVertexCount = 32 * 32;
+  maxVertexCount = 8 * 8;
   positionTextureSize = Math.ceil(Math.sqrt(this.maxVertexCount));
   positionArray = new Float32Array(this.maxVertexCount * 2);
   vertexCount = 0;
 
   onAdd(map, gl) {
     this.map = map;
+    this.init(gl)
   }
 
   /** @param { WebGL2RenderingContext } gl */
   async init(gl) {
+
+    this.gl = gl
+
     enableAllExtensions(gl);
 
     this.lineShader = await createShader(gl, "/shader/line.glsl");
+    this.showShader = await createShader(gl, "/shader/show.glsl");
 
     this.positionTexture = createTexture2D(
       gl,
@@ -30,26 +36,65 @@ export default class SuperLineLayer {
     );
   }
 
-  render(gl, matrix) {}
+  /** @param { WebGL2RenderingContext } gl */
+  render(gl, matrix) {
+
+    if (!this.lineShader) return
+
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    // gl.useProgram(this.showShader)
+
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, this.positionTexture)
+    // gl.uniform1i(gl.getUniformLocation(this.showShader, "showTexture"), 0)
+    // gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+
+    const zoom = this.map.getZoom();
+    const worldSize = 512 * Math.pow(2, zoom); // 地图总大小（以像素计）
+    const mercatorUnitsPerPixel = 1 / worldSize
+    const pixelLength = 10; // 假设要绘制一个宽度为4像素的线
+    const lineWidthInMercatorUnits = pixelLength * mercatorUnitsPerPixel;
+
+    gl.useProgram(this.lineShader)
+    gl.uniformMatrix4fv(gl.getUniformLocation(this.lineShader, "uMatrix"), false, matrix)
+    gl.uniform1f(gl.getUniformLocation(this.lineShader, "uPixelInMercator"), lineWidthInMercatorUnits);
+    gl.uniform1i(gl.getUniformLocation(this.lineShader, "lineTexture"), 0)
+    gl.uniform1i(gl.getUniformLocation(this.lineShader, "vertexCount"), this.vertexCount + 1)
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, (this.vertexCount + 1) * 2 + 2)
+    // gl.drawArrays(gl.LINE_STRIP, 0, this.vertexCount + 1)
+
+    gl.bindTexture(gl.TEXTURE_2D, null)
+  }
 
   confirmCurrentPoint() {
-    if (this.vertexCount === this.maxVertexCount) {
+
+    if (this.vertexCount + 1 === this.maxVertexCount) {
       console.warn("Vertex array is full, cannot add more points");
       return;
     }
 
-    this.vertexCount++;
+    this.currentPointConfirmed = true
   }
 
   updateCurrentPoint(mercatorCoords) {
+
+    if (this.currentPointConfirmed) {
+      this.vertexCount++;
+      this.currentPointConfirmed = false
+    }
+
+    const gl = this.gl
+
     this.positionArray[this.vertexCount * 2] = mercatorCoords.x;
     this.positionArray[this.vertexCount * 2 + 1] = mercatorCoords.y;
 
     const xOffset = this.vertexCount % this.positionTextureSize;
     const yOffset = Math.floor(this.vertexCount / this.positionTextureSize);
 
-    this.setTexturePixel(
-      this.gl,
+    setTexturePixel(
+      gl,
       this.positionTexture,
       xOffset,
       yOffset,
@@ -59,6 +104,28 @@ export default class SuperLineLayer {
     );
 
     this.map.triggerRepaint();
+  }
+
+  clearPoints() {
+
+    const gl = this.gl
+
+    this.positionArray.fill(0)
+    this.vertexCount = 0
+    this.currentPointConfirmed = false
+
+    gl.bindTexture(gl.TEXTURE_2D, this.positionTexture);
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,             // mip level
+      0, 0,          // xoffset, yoffset
+      this.positionTextureSize,
+      this.positionTextureSize,
+      gl.RG,
+      gl.FLOAT,
+      new Float32Array(this.maxVertexCount * 2)
+    );
+    gl.bindTexture(gl.TEXTURE_2D, null)
   }
 
   encodeFloatToDouble(value) {
@@ -117,7 +184,7 @@ async function createShader(gl, url) {
     if (!gl.getShaderParameter(module, gl.COMPILE_STATUS)) {
       console.error(
         "An error occurred compiling the shader module: " +
-          gl.getShaderInfoLog(module)
+        gl.getShaderInfoLog(module)
       );
       gl.deleteShader(module);
       return null;

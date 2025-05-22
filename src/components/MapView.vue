@@ -13,15 +13,6 @@ mapboxgl.accessToken =
 const mapContainer = ref(null);
 let map;
 
-function encodeFloatToDouble(value: number) {
-  let result = new Float32Array(2);
-  result[0] = value;
-  result[1] = value - result[0];
-  return result;
-}
-
-console.log(encodeFloatToDouble(0.1));
-
 onMounted(async () => {
   map = new mapboxgl.Map({
     container: "map-container",
@@ -33,6 +24,8 @@ onMounted(async () => {
   let lineLayer = new SuperLineLayer();
   let startFlag = false;
 
+  map.doubleClickZoom.disable()
+  
   map.on("load", () => {
     map.addLayer(lineLayer);
   });
@@ -42,11 +35,13 @@ onMounted(async () => {
     const mercatorCoords = mapboxgl.MercatorCoordinate.fromLngLat(lngLat);
 
     if (!startFlag) {
+      lineLayer.clearPoints();
       lineLayer.updateCurrentPoint(mercatorCoords);
       startFlag = true;
-    } else {
-      lineLayer.confirmCurrentPoint();
     }
+    
+    lineLayer.confirmCurrentPoint();
+    // lineLayer.updateCurrentPoint(mercatorCoords);
   });
 
   map.on("mousemove", (e: { lngLat: any }) => {
@@ -56,6 +51,13 @@ onMounted(async () => {
     const mercatorCoords = mapboxgl.MercatorCoordinate.fromLngLat(lngLat);
 
     lineLayer.updateCurrentPoint(mercatorCoords);
+  });
+
+  map.on("dblclick", (e: { lngLat: any }) => {
+    if (!startFlag) return;
+
+    lineLayer.confirmCurrentPoint();
+    startFlag = false;
   });
 });
 </script>
