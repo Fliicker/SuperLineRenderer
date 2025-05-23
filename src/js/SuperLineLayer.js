@@ -5,11 +5,11 @@ import axios from "axios";
 export default class SuperLineLayer {
   id = "highlight";
   type = "custom";
-  maxVertexCount = 8 * 8;
+  maxVertexCount = 64 * 64;
   positionTextureSize = Math.ceil(Math.sqrt(this.maxVertexCount));
-  positionArray = new Float32Array(this.maxVertexCount * 2);
+  positionArray = new Float32Array(this.maxVertexCount * 4);
   vertexCount = 0;
-  linePixelLength = 50;
+  linePixelLength = 20;
 
   onAdd(map, gl) {
     this.map = map;
@@ -30,8 +30,8 @@ export default class SuperLineLayer {
       gl,
       this.positionTextureSize,
       this.positionTextureSize,
-      gl.RG32F,
-      gl.RG,
+      gl.RGBA32F,
+      gl.RGBA,
       gl.FLOAT,
       this.positionArray
     );
@@ -41,6 +41,22 @@ export default class SuperLineLayer {
   render(gl, matrix) {
 
     if (!this.lineShader) return
+
+    const mapCenterLngLat = mapboxgl.MercatorCoordinate.fromLngLat(
+      this.map.transform._center.toArray()
+    );
+
+    const mapCenter = [mapCenterLngLat.x, mapCenterLngLat.y]
+    const relativeMat = mat4.translate([], matrix, [mapCenter[0], mapCenter[1], 0])
+    const mapPosX = encodeFloatToDouble(mapCenter[0])
+    const mapPosY = encodeFloatToDouble(mapCenter[1])
+
+
+    // calculate line width in mercator units
+    const zoom = this.map.getZoom();
+    const worldSize = 512 * Math.pow(2, zoom);
+    const mercatorUnitsPerPixel = 1 / worldSize
+    const lineWidthInMercatorUnits = this.linePixelLength * mercatorUnitsPerPixel;
 
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -52,16 +68,15 @@ export default class SuperLineLayer {
     // gl.uniform1i(gl.getUniformLocation(this.showShader, "showTexture"), 0)
     // gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 
-    const zoom = this.map.getZoom();
-    const worldSize = 512 * Math.pow(2, zoom);
-    const mercatorUnitsPerPixel = 1 / worldSize
-    const lineWidthInMercatorUnits = this.linePixelLength * mercatorUnitsPerPixel;
-
     gl.useProgram(this.lineShader)
     gl.uniformMatrix4fv(gl.getUniformLocation(this.lineShader, "uMatrix"), false, matrix)
     gl.uniform1f(gl.getUniformLocation(this.lineShader, "uPixelInMercator"), lineWidthInMercatorUnits);
     gl.uniform1i(gl.getUniformLocation(this.lineShader, "lineTexture"), 0)
     gl.uniform1i(gl.getUniformLocation(this.lineShader, "vertexCount"), this.vertexCount + 1)
+    gl.uniformMatrix4fv(gl.getUniformLocation(this.lineShader, 'uRelativeEyeMatrix'), false, relativeMat)
+    gl.uniform2fv(gl.getUniformLocation(this.lineShader, 'uCenterPosHigh'), new Float32Array([mapPosX[0], mapPosY[0]]))
+    gl.uniform2fv(gl.getUniformLocation(this.lineShader, 'uCenterPosLow'),  new Float32Array([mapPosX[1], mapPosY[1]]))
+
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, (this.vertexCount + 1) * 2 + 2)
     // gl.drawArrays(gl.LINE_STRIP, 0, this.vertexCount + 1)
 
@@ -87,8 +102,13 @@ export default class SuperLineLayer {
 
     const gl = this.gl
 
-    this.positionArray[this.vertexCount * 2] = mercatorCoords.x;
-    this.positionArray[this.vertexCount * 2 + 1] = mercatorCoords.y;
+    const [highX, lowX] = encodeFloatToDouble(mercatorCoords.x)
+    const [highY, lowY] = encodeFloatToDouble(mercatorCoords.y)
+
+    this.positionArray[this.vertexCount * 2] = highX;
+    this.positionArray[this.vertexCount * 2 + 1] = highY;
+    this.positionArray[this.vertexCount * 2 + 2] = lowX;
+    this.positionArray[this.vertexCount * 2 + 3] = lowY;
 
     const xOffset = this.vertexCount % this.positionTextureSize;
     const yOffset = Math.floor(this.vertexCount / this.positionTextureSize);
@@ -98,9 +118,9 @@ export default class SuperLineLayer {
       this.positionTexture,
       xOffset,
       yOffset,
-      gl.RG,
+      gl.RGBA,
       gl.FLOAT,
-      new Float32Array([mercatorCoords.x, mercatorCoords.y])
+      new Float32Array([highX, highY, lowX, lowY])
     );
 
     this.map.triggerRepaint();
@@ -121,22 +141,24 @@ export default class SuperLineLayer {
       0, 0,          // xoffset, yoffset
       this.positionTextureSize,
       this.positionTextureSize,
-      gl.RG,
+      gl.RGBA,
       gl.FLOAT,
-      new Float32Array(this.maxVertexCount * 2)
+      new Float32Array(this.maxVertexCount * 4)
     );
     gl.bindTexture(gl.TEXTURE_2D, null)
   }
 
-  encodeFloatToDouble(value) {
-    let result = new Float32Array(2);
-    result[0] = value;
-    result[1] = value - result[0];
-    return result;
-  }
+
 }
 
 // Helpers //////////////////////////////////////////////////////////////////////////////////////////////////////
+
+function encodeFloatToDouble(value) {
+  let result = new Float32Array(2);
+  result[0] = value;
+  result[1] = value - result[0];
+  return result;
+}
 
 /**
  * @param {WebGL2RenderingContext} gl
