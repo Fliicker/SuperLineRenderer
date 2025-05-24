@@ -30,7 +30,7 @@ out vec4 fragColor;
 
 void main() {
     vec4 color = texture(showTexture, texcoords);
-    fragColor = vec4(color.rg, 0.0, 0.3);
+    fragColor = vec4(color.rg, 0.5, 0.3);
 }
 
 #endif

@@ -18,14 +18,14 @@ onMounted(async () => {
     container: "map-container",
     center: [118.800697, 32.064162], // starting position [lng, lat]
     zoom: 4,
-    style: "mapbox://styles/mapbox/dark-v10", // style URL
+    style: "mapbox://styles/mapbox/light-v10", // style URL
   });
 
   let lineLayer = new SuperLineLayer();
   let startFlag = false;
 
   map.doubleClickZoom.disable()
-  
+
   map.on("load", () => {
     map.addLayer(lineLayer);
   });

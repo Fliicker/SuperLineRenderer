@@ -5,11 +5,11 @@ import axios from "axios";
 export default class SuperLineLayer {
   id = "highlight";
   type = "custom";
-  maxVertexCount = 64 * 64;
+  maxVertexCount = 8 * 8;
   positionTextureSize = Math.ceil(Math.sqrt(this.maxVertexCount));
   positionArray = new Float32Array(this.maxVertexCount * 4);
   vertexCount = 0;
-  linePixelLength = 20;
+  linePixelLength = 4;
 
   onAdd(map, gl) {
     this.map = map;
@@ -24,7 +24,11 @@ export default class SuperLineLayer {
     enableAllExtensions(gl);
 
     this.lineShader = await createShader(gl, "/shader/line.glsl");
-    this.showShader = await createShader(gl, "/shader/show.glsl");
+    // this.lineShader = await createShader(gl, "/shader/dashLine.glsl");
+    // this.showShader = await createShader(gl, "/shader/show.glsl");
+    this.lineShader = await createShader(gl, "/shader/railway.glsl");
+
+
 
     this.positionTexture = createTexture2D(
       gl,

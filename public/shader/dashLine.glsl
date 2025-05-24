@@ -148,6 +148,15 @@ vec2 getAccurateVertex(int vertexIndex) {
     return translatedPos;
 }
 
+float getTraveledLength(vec2 P, vec2 A, vec2 B) {
+    vec2 AP = P - A;
+    vec2 AB = B - A;
+    float segLen = length(AB);
+    float t = clamp(dot(AP, AB) / dot(AB, AB), 0.0, 1.0);
+    // float t = dot(AP, AB) / dot(AB, AB); 
+    return segLen * t;
+}
+
 void main() {
 
     int currentVertexIndex = int(floor(vertexArea));
@@ -155,14 +164,24 @@ void main() {
     vec2 nextVertexPos = getAccurateVertex(currentVertexIndex + 1);
 
     float distance = distanceToLineSegment(mercatorPosition, currentVertexPos, nextVertexPos);
+    float traveledLength = getTraveledLength(mercatorPosition, currentVertexPos, nextVertexPos);
+
     float ratio = distance / uPixelInMercator;
 
-    if(ratio <= 0.3) {
-        fragColor = vec4(0.0, 0.52, 1.0, 1.0);
-    } else {
-        fragColor = vec4(0.0, 0.52, 1.0, (1.0 - ratio) / 0.7);
-    }
+    float dashLength = uPixelInMercator * 4.0;
+    float dashIndex = floor(traveledLength / dashLength);
+    float dashFlag = mod(dashIndex, 2.0); // 0 or 1
+
     // fragColor = vec4(0.0, 1.0, 0.65, 1.0);
+    if(dashFlag < 0.5) {
+        if(ratio <= 0.8) {
+            fragColor = vec4(0.0, 0.52, 1.0, 1.0);
+        } else {
+            fragColor = vec4(0.0, 0.52, 1.0, (1.0 - ratio) / 0.2);
+        }
+    } else {
+        discard;
+    }
 }
 
 #endif
